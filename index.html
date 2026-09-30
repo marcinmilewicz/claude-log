@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Claude Code Analytics: token and cost dashboard</title>
+    <meta
+      name="description"
+      content="Free, private dashboard for your Claude Code usage. Drop in a zip of ~/.claude to see cost at API prices, the most expensive prompts, context, tools, MCP, skills and subagents."
+    />
+    <meta name="author" content="Marcin Milewicz" />
+    <link rel="canonical" href="https://claude.marcinmilewicz.pl/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0d0d0d" />
+    <script>
+      // Dark by default; apply a saved light choice before the first paint (see src/theme.ts).
+      try {
+        if (localStorage.getItem('theme') === 'light') {
+          document.documentElement.dataset.theme = 'light';
+          document.querySelector('meta[name="theme-color"]').content = '#f9f9f7';
+        }
+      } catch {}
+    </script>
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Claude Code Analytics" />
+    <meta property="og:url" content="https://claude.marcinmilewicz.pl/" />
+    <meta property="og:title" content="Claude Code Analytics: see where your tokens and money go" />
+    <meta
+      property="og:description"
+      content="Drop in a zip of ~/.claude and get a dashboard of cost, prompts, context, tools, MCP, skills and subagents. Parsed in your browser, never uploaded."
+    />
+    <meta property="og:image" content="https://claude.marcinmilewicz.pl/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Claude Code Analytics overview: cost at API prices, total tokens, API calls, prompts, sessions and tool calls." />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Claude Code Analytics: see where your tokens and money go" />
+    <meta
+      name="twitter:description"
+      content="Drop in a zip of ~/.claude and get a dashboard of cost, prompts, context, tools, MCP, skills and subagents. Parsed in your browser, never uploaded."
+    />
+    <meta name="twitter:image" content="https://claude.marcinmilewicz.pl/og.png" />
+    <meta name="twitter:image:alt" content="Claude Code Analytics overview: cost at API prices, total tokens, API calls, prompts, sessions and tool calls." />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Claude Code Analytics",
+        "url": "https://claude.marcinmilewicz.pl/",
+        "description": "Free, private dashboard for Claude Code usage: cost at API prices, the most expensive prompts, context, tools, MCP servers, skills and subagents. The data is parsed in the browser and never uploaded.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "image": "https://claude.marcinmilewicz.pl/og.png",
+        "screenshot": "https://claude.marcinmilewicz.pl/og.png",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": {
+          "@type": "Person",
+          "name": "Marcin Milewicz",
+          "url": "https://www.linkedin.com/in/marcinmilewicz/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <!-- Shown until the app loads, and to crawlers that don't run JavaScript. React replaces it. -->
+      <div class="app">
+        <div class="landing">
+          <div class="landing-hero">
+            <h1>Claude Code Analytics</h1>
+            <p>
+              See where tokens and money go, which prompts and sessions cost the most, which tools, skills and subagents you use, and where work
+              gets stuck. Drop in a zip of ~/.claude; it is parsed in your browser and never uploaded.
+            </p>
+            <noscript><p>This app needs JavaScript.</p></noscript>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
