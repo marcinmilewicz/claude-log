@@ -1,0 +1,14 @@
+claude-log (Claude Code Analytics)
+Copyright 2026 Marcin Milewicz
+https://github.com/marcinmilewicz/claude-log
+https://claude.marcinmilewicz.pl/
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Under section 4(d) of the License, any redistribution of this software or of
+a derivative work must include a readable copy of this attribution notice:
+in a NOTICE file distributed with it, in its documentation, or in a display
+it generates wherever such third-party notices normally appear.
+
+The distributed CLI bundles third-party software whose licenses are listed
+in THIRD_PARTY_LICENSES.txt.

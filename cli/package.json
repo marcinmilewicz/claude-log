@@ -1,0 +1,36 @@
+{
+  "name": "claude-log",
+  "version": "0.1.0",
+  "description": "Claude Code usage dashboard as a single local HTML file: cost at API prices, prompts, tools, MCP, skills and subagents.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "claude-log": "dist/claude-log.mjs"
+  },
+  "files": [
+    "dist/claude-log.mjs",
+    "dist/THIRD_PARTY_LICENSES.txt",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "prepack": "cd .. && npm run build:cli"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "analytics",
+    "tokens",
+    "cost"
+  ],
+  "author": "Marcin Milewicz",
+  "homepage": "https://claude.marcinmilewicz.pl/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcinmilewicz/claude-log.git",
+    "directory": "cli"
+  },
+  "bugs": "https://github.com/marcinmilewicz/claude-log/issues"
+}

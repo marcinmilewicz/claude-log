@@ -1,6 +1,20 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Theme } from '../theme';
-import { icons } from './icons';
+import { icons, LinkedInIcon } from './icons';
+
+// ---------- Footer ----------
+
+export function Footer() {
+  return (
+    <footer className="footer">
+      Made by{' '}
+      <a href="https://www.linkedin.com/in/marcinmilewicz/" target="_blank" rel="noopener noreferrer">
+        <LinkedInIcon />
+        Marcin Milewicz
+      </a>
+    </footer>
+  );
+}
 
 // ---------- Theme toggle ----------
 

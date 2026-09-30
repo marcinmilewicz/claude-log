@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Dashboard from './Dashboard';
-import { icons, LinkedInIcon, Logo } from './components/icons';
-import { ThemeToggle, TooltipProvider } from './components/ui';
+import { icons, Logo } from './components/icons';
+import { Footer, ThemeToggle, TooltipProvider } from './components/ui';
 import { bytes } from './core/format';
 import type { Dataset } from './core/types';
 import type { Progress } from './core/zip';
@@ -72,18 +72,6 @@ export default function App() {
       )}
       <Footer />
     </TooltipProvider>
-  );
-}
-
-function Footer() {
-  return (
-    <footer className="footer">
-      Made by{' '}
-      <a href="https://www.linkedin.com/in/marcinmilewicz/" target="_blank" rel="noopener noreferrer">
-        <LinkedInIcon />
-        Marcin Milewicz
-      </a>
-    </footer>
   );
 }
 
