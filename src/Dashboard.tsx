@@ -17,7 +17,7 @@ function toInputDate(ts: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export default function Dashboard({ dataset: ds, onReset, theme, onTheme }: { dataset: Dataset; onReset: () => void; theme: Theme; onTheme: (t: Theme) => void }) {
+export default function Dashboard({ dataset: ds, onReset, theme, onTheme }: { dataset: Dataset; onReset?: () => void; theme: Theme; onTheme: (t: Theme) => void }) {
   const lastTs = useMemo(() => ds.calls.reduce((m, c) => (c.ts > m ? c.ts : m), 0) || Date.now(), [ds]);
   const firstTs = useMemo(() => ds.calls.reduce((m, c) => (c.ts && c.ts < m ? c.ts : m), Infinity), [ds]);
   const [preset, setPreset] = useState<Preset>('all');
@@ -83,9 +83,11 @@ export default function Dashboard({ dataset: ds, onReset, theme, onTheme }: { da
         </div>
         <div className="topbar-actions">
           <ThemeToggle theme={theme} onChange={onTheme} />
-          <button className="btn" onClick={onReset}>
-            Load another file
-          </button>
+          {onReset && (
+            <button className="btn" onClick={onReset}>
+              Load another file
+            </button>
+          )}
         </div>
       </header>
 

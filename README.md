@@ -17,6 +17,29 @@ Zip to upload:
 cd ~/.claude && zip -r ~/Desktop/claude-data.zip projects history.jsonl stats-cache.json sessions -x '*/tool-results/*'
 ```
 
+## CLI: a local report without a zip
+
+The `claude-log` npm package reads `~/.claude` directly and writes the same dashboard as one self-contained HTML file (scripts, styles and data inlined) that opens from disk in a browser. Nothing is uploaded, not even to the local browser app.
+
+```sh
+npx claude-log                 # reads ~/.claude, writes ./claude-log-report.html and opens it
+npx claude-log ~/Desktop/claude-data.zip -o report.html --no-open
+```
+
+See `cli/README.md` for all options. The report contains prompts and file paths, so don't share it carelessly. On large histories it can be tens of MB.
+
+### Building and publishing the CLI
+
+```sh
+npm run build:cli              # builds cli/dist/claude-log.mjs
+npm run report                 # runs the local build on ~/.claude
+cd cli && npm pack             # builds and packs claude-log-<version>.tgz
+npx --package ./cli/claude-log-0.1.0.tgz claude-log   # runs the packed tarball like `npx claude-log`
+cd cli && npm publish          # builds and publishes to npm (needs `npm login`)
+```
+
+The package lives in `cli/` and has no runtime dependencies. Its `prepack` script runs `build:cli` in the repository root, in two steps. First, `vite.report.config.ts` builds `report.html` (entry `src/report.tsx`, the dashboard without the landing page) into a single file with everything inlined. Then `vite.cli.config.ts` bundles `src/cli/main.ts`, that template and all dependencies into one Node script. It also copies `LICENSE` and `NOTICE` into `cli/` and writes `THIRD_PARTY_LICENSES.txt` for the bundled packages (React, zip.js). At run time the CLI parses the data with the same code as the browser app (`src/core/parse.ts`) and puts the dataset as JSON in place of the placeholder in the template.
+
 ## Where the data comes from
 
 | File in the zip | What we take from it |
@@ -52,3 +75,7 @@ npx tsx scripts/demo-data.ts ~/Desktop/demo-claude-data.zip
 ```
 
 Load that zip in the app to get the same dashboard. `public/og.png` (the link preview, 1200×630) is the Overview section of that dashboard.
+
+## License
+
+[Apache-2.0](LICENSE) © Marcin Milewicz. You can use, modify and redistribute the code, including commercially. Redistributions and derivative works must keep the copyright and license notices and the attribution in [NOTICE](NOTICE).

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Claude Code Analytics report</title>
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0d0d0d" />
+    <script>
+      // Dark by default; apply a saved light choice before the first paint (see src/theme.ts).
+      try {
+        if (localStorage.getItem('theme') === 'light') {
+          document.documentElement.dataset.theme = 'light';
+          document.querySelector('meta[name="theme-color"]').content = '#f9f9f7';
+        }
+      } catch {}
+    </script>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- The CLI replaces the placeholder with the parsed dataset as JSON. -->
+    <script type="application/json" id="dataset">__CLAUDE_LOG_DATASET__</script>
+    <script type="module" src="/src/report.tsx"></script>
+  </body>
+</html>

@@ -2,3 +2,9 @@ node_modules
 dist
 *.zip
 .vercel
+cli/dist
+cli/.template
+claude-log-report.html
+cli/LICENSE
+cli/NOTICE
+*.tgz

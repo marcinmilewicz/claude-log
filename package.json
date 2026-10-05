@@ -2,10 +2,13 @@
   "name": "claude-log",
   "private": true,
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:cli": "tsc --noEmit && vite build -c vite.report.config.ts && vite build -c vite.cli.config.ts",
+    "report": "node cli/dist/claude-log.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
