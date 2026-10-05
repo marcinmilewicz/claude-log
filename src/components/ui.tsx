@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Theme } from '../theme';
-import { icons, LinkedInIcon } from './icons';
+import { GitHubIcon, icons, LinkedInIcon } from './icons';
 
 // ---------- Footer ----------
+
+export const REPO_URL = 'https://github.com/marcinmilewicz/claude-log';
 
 export function Footer() {
   return (
@@ -11,6 +13,11 @@ export function Footer() {
       <a href="https://www.linkedin.com/in/marcinmilewicz/" target="_blank" rel="noopener noreferrer">
         <LinkedInIcon />
         Marcin Milewicz
+      </a>
+      <span aria-hidden="true">·</span>
+      <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+        <GitHubIcon />
+        Open source on GitHub
       </a>
     </footer>
   );

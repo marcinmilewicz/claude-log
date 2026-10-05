@@ -871,6 +871,15 @@ table.data tbody tr:hover td {
   color: var(--accent);
 }
 
+a.chip {
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+a.chip:hover {
+  border-color: var(--accent);
+}
+
 .dropzone {
   display: flex;
   flex-direction: column;
@@ -943,6 +952,18 @@ table.data tbody tr:hover td {
   color: var(--text-muted);
 }
 
+.howto .fine + .fine {
+  margin-top: 8px;
+}
+
+.howto + .howto {
+  margin-top: 16px;
+}
+
+.howto .cmd:last-child {
+  margin-bottom: 0;
+}
+
 .cmd {
   display: flex;
   align-items: flex-start;
@@ -1007,6 +1028,7 @@ table.data tbody tr:hover td {
 
 .footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 6px;

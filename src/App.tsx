@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Dashboard from './Dashboard';
-import { icons, Logo } from './components/icons';
-import { Footer, ThemeToggle, TooltipProvider } from './components/ui';
+import { GitHubIcon, icons, Logo } from './components/icons';
+import { Footer, REPO_URL, ThemeToggle, TooltipProvider } from './components/ui';
 import { bytes } from './core/format';
 import type { Dataset } from './core/types';
 import type { Progress } from './core/zip';
@@ -20,6 +20,8 @@ const EXAMPLES = [
 type Example = (typeof EXAMPLES)[number];
 
 const ZIP_CMD = `cd ~/.claude && zip -r ~/Desktop/claude-data.zip projects history.jsonl stats-cache.json sessions -x '*/tool-results/*'`;
+const LOCAL_CMD = 'npx claude-log';
+const SOURCE_CMD = `git clone ${REPO_URL} && cd claude-log && npm install && npm run build:cli && npm run report`;
 
 type State =
   | { phase: 'idle'; error?: string }
@@ -119,7 +121,6 @@ function Examples({ theme }: { theme: Theme }) {
 
 function Landing({ state, onFile }: { state: Exclude<State, { phase: 'ready' }>; onFile: (f: File) => void }) {
   const [over, setOver] = useState(false);
-  const [copied, setCopied] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const p = state.phase === 'loading' ? state.progress : null;
   const ratio = p && p.totalBytes ? p.doneBytes / p.totalBytes : 0;
@@ -138,6 +139,9 @@ function Landing({ state, onFile }: { state: Exclude<State, { phase: 'ready' }>;
             <span className="chip">{icons.lock} Stays in your browser</span>
             <span className="chip">{icons.bolt} Parsed locally in a worker</span>
             <span className="chip">{icons.chart} Costs at API prices</span>
+            <a className="chip" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+              <GitHubIcon size={14} /> Open source
+            </a>
           </div>
           {state.phase === 'idle' && (
             <a className="see-example" href="#examples">
@@ -203,21 +207,7 @@ function Landing({ state, onFile }: { state: Exclude<State, { phase: 'ready' }>;
         <div className="card howto">
           <h3>How to prepare the zip</h3>
           <p>Run this in a terminal:</p>
-          <div className="cmd">
-            <code>{ZIP_CMD}</code>
-            <button
-              className="btn"
-              onClick={() => {
-                navigator.clipboard?.writeText(ZIP_CMD).then(() => {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
-                });
-              }}
-            >
-              {copied ? icons.check : icons.copy}
-              {copied ? 'Copied' : 'Copy'}
-            </button>
-          </div>
+          <Command text={ZIP_CMD} />
           <p className="fine">
             <code>projects/</code> holds session and subagent transcripts (the source of tokens, costs, tools and skills). <code>history.jsonl</code> is
             the prompt history, which goes further back than the transcripts. <code>sessions/</code> lists the sessions running when the zip was made.{' '}
@@ -225,7 +215,49 @@ function Landing({ state, onFile }: { state: Exclude<State, { phase: 'ready' }>;
             than 30 days (<code>cleanupPeriodDays</code>).
           </p>
         </div>
+
+        <div className="card howto">
+          <h3>Or run it on your own computer</h3>
+          <p>
+            The same report can be built entirely offline, without making a zip or opening this site. With Node.js 20 or later, run:
+          </p>
+          <Command text={LOCAL_CMD} />
+          <p className="fine">
+            It reads <code>~/.claude</code> directly and writes <code>claude-log-report.html</code> to the current directory, then opens it in your
+            browser. The report is a single self-contained file with no network requests. Use <code>-o ~/Desktop/report.html</code> to choose where
+            it goes, or pass a directory or zip to read other data.
+          </p>
+          <p className="fine">
+            claude-log is open source.{' '}
+            <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+              Read the code on GitHub
+            </a>{' '}
+            or build the report from source:
+          </p>
+          <Command text={SOURCE_CMD} />
+        </div>
       </div>
+    </div>
+  );
+}
+
+function Command({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="cmd">
+      <code>{text}</code>
+      <button
+        className="btn"
+        onClick={() => {
+          navigator.clipboard?.writeText(text).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+      >
+        {copied ? icons.check : icons.copy}
+        {copied ? 'Copied' : 'Copy'}
+      </button>
     </div>
   );
 }
