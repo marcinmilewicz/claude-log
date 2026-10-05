@@ -1,6 +1,6 @@
 {
   "name": "claude-log",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claude Code usage dashboard as a single local HTML file: cost at API prices, prompts, tools, MCP, skills and subagents.",
   "license": "Apache-2.0",
   "type": "module",
