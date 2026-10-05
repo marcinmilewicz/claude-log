@@ -113,6 +113,14 @@ export const icons = {
       <path d="M20 6 9 17l-5-5" />
     </Icon>
   ),
+  star: (
+    <Icon size={16}>
+      <path
+        fill="currentColor"
+        d="m12 2.5 2.94 5.96 6.56.95-4.75 4.63 1.12 6.54L12 17.49l-5.87 3.09 1.12-6.54L2.5 9.41l6.56-.95L12 2.5Z"
+      />
+    </Icon>
+  ),
 };
 
 export function Logo({ size = 32 }: { size?: number }) {

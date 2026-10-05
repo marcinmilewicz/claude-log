@@ -36,6 +36,7 @@
   --page-glow-1: rgba(42, 120, 214, 0.1);
   --page-glow-2: rgba(235, 104, 52, 0.08);
   --accent-soft: rgba(42, 120, 214, 0.1);
+  --cta: #256abf;
   --shadow-sm: 0 1px 2px rgba(11, 11, 11, 0.04), 0 1px 3px rgba(11, 11, 11, 0.04);
   --shadow-md: 0 4px 16px rgba(11, 11, 11, 0.06), 0 1px 3px rgba(11, 11, 11, 0.05);
   --shadow-lg: 0 12px 40px rgba(11, 11, 11, 0.14);
@@ -59,6 +60,7 @@
   --page-glow-1: rgba(57, 135, 229, 0.14);
   --page-glow-2: rgba(217, 89, 38, 0.08);
   --accent-soft: rgba(57, 135, 229, 0.16);
+  --cta: #2a78d6;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
@@ -1028,18 +1030,90 @@ a.chip:hover {
 
 .footer {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 20px 16px 28px;
+  gap: 18px;
+  padding: 28px 16px 28px;
   margin-top: 24px;
   border-top: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 13px;
 }
 
-.footer a {
+.footer-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 14px 20px;
+  width: 100%;
+  max-width: 760px;
+  padding: 18px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surface-1);
+  box-shadow: var(--shadow-sm);
+  text-align: center;
+}
+
+.footer-cta p {
+  flex: 1 1 280px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.footer-cta strong {
+  color: var(--text-primary);
+}
+
+.star-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--cta);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+}
+
+.star-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg);
+}
+
+.star-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.star-btn-icon {
+  display: inline-flex;
+  color: var(--warning);
+  transition: transform 0.25s;
+}
+
+.star-btn:hover .star-btn-icon {
+  transform: rotate(72deg) scale(1.15);
+}
+
+.footer-credit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.footer-credit a {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1051,7 +1125,7 @@ a.chip:hover {
   transition: background 0.15s;
 }
 
-.footer a:hover {
+.footer-credit a:hover {
   background: var(--surface-2);
 }
 
@@ -1175,6 +1249,14 @@ a.chip:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .star-btn,
+  .star-btn-icon {
+    transition: none;
+  }
+  .star-btn:hover,
+  .star-btn:hover .star-btn-icon {
+    transform: none;
+  }
   .example-shot {
     transition: none;
   }

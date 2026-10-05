@@ -9,16 +9,27 @@ export const REPO_URL = 'https://github.com/marcinmilewicz/claude-log';
 export function Footer() {
   return (
     <footer className="footer">
-      Made by{' '}
-      <a href="https://www.linkedin.com/in/marcinmilewicz/" target="_blank" rel="noopener noreferrer">
-        <LinkedInIcon />
-        Marcin Milewicz
-      </a>
-      <span aria-hidden="true">·</span>
-      <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
-        <GitHubIcon />
-        Open source on GitHub
-      </a>
+      <div className="footer-cta">
+        <p>
+          <strong>Finding claude-log useful?</strong> Give it a star on GitHub. It takes one click and helps other Claude Code users find it.
+        </p>
+        <a className="star-btn" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          <span className="star-btn-icon">{icons.star}</span>
+          Star claude-log on GitHub
+        </a>
+      </div>
+      <div className="footer-credit">
+        Made by{' '}
+        <a href="https://www.linkedin.com/in/marcinmilewicz/" target="_blank" rel="noopener noreferrer">
+          <LinkedInIcon />
+          Marcin Milewicz
+        </a>
+        <span aria-hidden="true">·</span>
+        <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          <GitHubIcon />
+          Open source on GitHub
+        </a>
+      </div>
     </footer>
   );
 }
