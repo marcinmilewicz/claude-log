@@ -42,7 +42,8 @@ for (const s of ds.sessions) {
   reported += s.reported.cost;
   computed += bySession.get(s.id) ?? 0;
 }
-console.log(`sessions with cost-state: ${n}; reported cost ${reported.toFixed(2)} vs computed ${computed.toFixed(2)} (${((computed / reported - 1) * 100).toFixed(1)}%)`);
+if (n > 0) console.log(`sessions with cost-state: ${n}; reported cost ${reported.toFixed(2)} vs computed ${computed.toFixed(2)} (${((computed / reported - 1) * 100).toFixed(1)}%)`);
+else console.log('sessions with cost-state: 0');
 
 const top = new Map<string, number>();
 for (const t of ds.tools) top.set(t.name, (top.get(t.name) ?? 0) + 1);

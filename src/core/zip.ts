@@ -1,6 +1,5 @@
 import { BlobReader, TextWriter, ZipReader, configure, type Entry, type FileEntry } from '@zip.js/zip.js';
-import { classifyPath } from './ingest';
-import { parseFiles, type Progress, type SourceFile } from './parse';
+import { NO_TRANSCRIPTS, classifyAll, parseFiles, type Progress, type SourceFile } from './parse';
 import type { Dataset } from './types';
 
 export type { Progress } from './parse';
@@ -29,11 +28,12 @@ export async function parseZip(file: Blob, name: string, onProgress: (p: Progres
   const zip = new ZipReader(new BlobReader(file));
   const entries: Entry[] = await zip.getEntries();
 
+  const fileEntries = entries.filter((e) => !e.directory);
+  const { kinds } = classifyAll(fileEntries.map((e) => e.filename));
   const wanted: SourceFile[] = [];
   let skipped = 0;
-  for (const e of entries) {
-    if (e.directory) continue;
-    const kind = classifyPath(e.filename);
+  for (const [i, e] of fileEntries.entries()) {
+    const kind = kinds[i];
     if (!kind) {
       skipped++;
       continue;
@@ -49,7 +49,7 @@ export async function parseZip(file: Blob, name: string, onProgress: (p: Progres
   }
   if (wanted.length === 0) {
     await zip.close();
-    throw new Error('The zip has no Claude Code transcripts (<sessionId>.jsonl files in project directories).');
+    throw new Error(`${NO_TRANSCRIPTS} in the zip.`);
   }
 
   try {

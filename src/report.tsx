@@ -32,6 +32,7 @@ function Report({ dataset }: { dataset: Dataset }) {
 }
 
 const dataset = readDataset();
+if (dataset?.sources.includes('codex')) document.title = dataset.sources.includes('claude') ? 'Claude Code + Codex Analytics report' : 'Codex Analytics report';
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {dataset ? (

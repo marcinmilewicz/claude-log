@@ -20,6 +20,7 @@ const EXAMPLES = [
 type Example = (typeof EXAMPLES)[number];
 
 const ZIP_CMD = `cd ~/.claude && zip -r ~/Desktop/claude-data.zip projects history.jsonl stats-cache.json sessions -x '*/tool-results/*'`;
+const CODEX_ZIP_CMD = `cd ~/.codex && zip -r ~/Desktop/codex-data.zip sessions archived_sessions history.jsonl`;
 const LOCAL_CMD = 'npx claude-log';
 const SOURCE_CMD = `git clone ${REPO_URL} && cd claude-log && npm install && npm run build:cli && npm run report`;
 
@@ -37,18 +38,21 @@ export default function App() {
   };
   const workerRef = useRef<Worker | null>(null);
 
-  const load = (file: File) => {
-    if (!/\.zip$/i.test(file.name)) {
-      setState({ phase: 'idle', error: `"${file.name}" is not a .zip file.` });
+  // Several zips (e.g. Claude Code and Codex) are combined into one report.
+  const load = (files: File[]) => {
+    const bad = files.find((f) => !/\.zip$/i.test(f.name));
+    if (bad) {
+      setState({ phase: 'idle', error: `"${bad.name}" is not a .zip file.` });
       return;
     }
     workerRef.current?.terminate();
     const worker = new Worker(new URL('./worker/parse.worker.ts', import.meta.url), { type: 'module' });
     workerRef.current = worker;
-    setState({ phase: 'loading', name: file.name, progress: null });
+    const name = files.map((f) => f.name).join(' + ');
+    setState({ phase: 'loading', name, progress: null });
     worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
       const m = e.data;
-      if (m.type === 'progress') setState({ phase: 'loading', name: file.name, progress: m.progress });
+      if (m.type === 'progress') setState({ phase: 'loading', name, progress: m.progress });
       else if (m.type === 'done') {
         setState({ phase: 'ready', dataset: m.dataset });
         worker.terminate();
@@ -58,7 +62,7 @@ export default function App() {
       }
     };
     worker.onerror = (e) => setState({ phase: 'idle', error: e.message || 'Failed to process the file.' });
-    worker.postMessage({ file });
+    worker.postMessage({ files });
   };
 
   return (
@@ -68,7 +72,7 @@ export default function App() {
       ) : (
         <>
           <ThemeToggle theme={theme} onChange={changeTheme} className="landing-toggle" />
-          <Landing state={state} onFile={load} />
+          <Landing state={state} onFiles={load} />
           {state.phase === 'idle' && <Examples theme={theme} />}
         </>
       )}
@@ -119,7 +123,7 @@ function Examples({ theme }: { theme: Theme }) {
   );
 }
 
-function Landing({ state, onFile }: { state: Exclude<State, { phase: 'ready' }>; onFile: (f: File) => void }) {
+function Landing({ state, onFiles }: { state: Exclude<State, { phase: 'ready' }>; onFiles: (f: File[]) => void }) {
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const p = state.phase === 'loading' ? state.progress : null;
@@ -182,21 +186,22 @@ function Landing({ state, onFile }: { state: Exclude<State, { phase: 'ready' }>;
             onDrop={(e) => {
               e.preventDefault();
               setOver(false);
-              const f = e.dataTransfer.files[0];
-              if (f) onFile(f);
+              const files = [...e.dataTransfer.files];
+              if (files.length) onFiles(files);
             }}
           >
             <span className="dz-icon">{icons.upload}</span>
-            <strong>Drop claude-data.zip here</strong>
+            <strong>Drop claude-data.zip here (and codex-data.zip)</strong>
             <span className="dz-sub">or click to choose a file</span>
             <input
               ref={input}
               type="file"
               accept=".zip,application/zip"
+              multiple
               hidden
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onFile(f);
+                const files = [...(e.target.files ?? [])];
+                if (files.length) onFiles(files);
                 e.target.value = '';
               }}
             />
@@ -214,6 +219,12 @@ function Landing({ state, onFile }: { state: Exclude<State, { phase: 'ready' }>;
             <code>tool-results</code> directories are skipped because they are large and not needed. By default Claude Code deletes transcripts older
             than 30 days (<code>cleanupPeriodDays</code>).
           </p>
+          <p>Using Codex too? Zip its sessions as well and drop both zips at once for one combined report:</p>
+          <Command text={CODEX_ZIP_CMD} />
+          <p className="fine">
+            <code>sessions/</code> and <code>archived_sessions/</code> hold the session rollouts (tokens, tools, prompts and plan usage limits),{' '}
+            <code>history.jsonl</code> is the prompt history. Costs are computed at OpenAI API prices.
+          </p>
         </div>
 
         <div className="card howto">
@@ -223,9 +234,9 @@ function Landing({ state, onFile }: { state: Exclude<State, { phase: 'ready' }>;
           </p>
           <Command text={LOCAL_CMD} />
           <p className="fine">
-            It reads <code>~/.claude</code> directly and writes <code>claude-log-report.html</code> to the current directory, then opens it in your
+            It reads <code>~/.claude</code> and <code>~/.codex</code> directly (whichever exist) and writes <code>claude-log-report.html</code> to the current directory, then opens it in your
             browser. The report is a single self-contained file with no network requests. Use <code>-o ~/Desktop/report.html</code> to choose where
-            it goes, or pass a directory or zip to read other data.
+            it goes, <code>--claude</code> or <code>--codex</code> to read only one tool, or pass directories or zips to read other data.
           </p>
           <p className="fine">
             claude-log is open source.{' '}

@@ -1,7 +1,7 @@
 {
   "name": "claude-log",
   "version": "0.1.1",
-  "description": "Claude Code usage dashboard as a single local HTML file: cost at API prices, prompts, tools, MCP, skills and subagents.",
+  "description": "Claude Code and Codex usage dashboard as a single local HTML file: cost at API prices, prompts, tools, MCP, skills and subagents.",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -21,6 +21,7 @@
   "keywords": [
     "claude",
     "claude-code",
+    "codex",
     "analytics",
     "tokens",
     "cost"

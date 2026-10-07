@@ -1,12 +1,14 @@
 import { createReadStream, existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { classifyPath, prettyCwd } from '../core/ingest';
-import { parseFiles, type Progress, type SourceFile } from '../core/parse';
+import { prettyCwd } from '../core/ingest';
+import { NO_TRANSCRIPTS, classifyAll, parseFiles, type Progress, type SourceFile } from '../core/parse';
 import type { Dataset } from '../core/types';
 
 // The same entries the zip command on the landing page picks from ~/.claude.
 const CLAUDE_DIR_ENTRIES = ['projects', 'history.jsonl', 'stats-cache.json', 'sessions'];
+// The parts of ~/.codex with session rollouts and prompt history.
+const CODEX_DIR_ENTRIES = ['sessions', 'archived_sessions', 'history.jsonl'];
 const SKIP_DIRS = new Set(['tool-results', 'file-history', 'node_modules', '.git']);
 
 async function walk(path: string, out: string[]) {
@@ -35,18 +37,28 @@ async function streamLines(path: string, onLine: (line: string) => void, onBytes
   if (rest) onLine(rest);
 }
 
-// Parses a Claude Code data directory in place: ~/.claude, its projects/
-// directory, or a single project directory.
+function startPaths(root: string): string[] {
+  if (existsSync(join(root, 'projects'))) return CLAUDE_DIR_ENTRIES.map((e) => join(root, e));
+  // ~/.codex (has config.toml or auth.json next to sessions/)
+  if (existsSync(join(root, 'sessions')) && (existsSync(join(root, 'config.toml')) || existsSync(join(root, 'auth.json')))) {
+    return CODEX_DIR_ENTRIES.map((e) => join(root, e));
+  }
+  return [root];
+}
+
+// Parses a data directory in place: ~/.claude, its projects/ directory or a
+// single project directory, or ~/.codex or its sessions/ directory.
 export async function parseDir(root: string, onProgress: (p: Progress) => void): Promise<Dataset> {
   const paths: string[] = [];
-  const starts = existsSync(join(root, 'projects')) ? CLAUDE_DIR_ENTRIES.map((e) => join(root, e)) : [root];
-  for (const s of starts) await walk(s, paths);
+  for (const s of startPaths(root)) await walk(s, paths);
 
+  const rels = paths.map((path) => relative(root, path).split(sep).join('/'));
+  const { kinds } = classifyAll(rels);
   const files: SourceFile[] = [];
   let skipped = 0;
-  for (const path of paths) {
-    const rel = relative(root, path).split(sep).join('/');
-    const kind = classifyPath(rel);
+  for (const [i, path] of paths.entries()) {
+    const rel = rels[i];
+    const kind = kinds[i];
     if (!kind) {
       skipped++;
       continue;
@@ -59,6 +71,6 @@ export async function parseDir(root: string, onProgress: (p: Progress) => void):
       text: () => readFile(path, 'utf8'),
     });
   }
-  if (files.length === 0) throw new Error(`No Claude Code transcripts (<sessionId>.jsonl files in project directories) in ${root}.`);
+  if (files.length === 0) throw new Error(`${NO_TRANSCRIPTS} in ${root}.`);
   return parseFiles(prettyCwd(root), files, skipped, onProgress);
 }

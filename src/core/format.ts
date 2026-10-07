@@ -60,3 +60,10 @@ export function bytes(v: number): string {
   if (v >= 1e6) return `${nf(0).format(v / 1e6)} MB`;
   return `${nf(0).format(v / 1e3)} KB`;
 }
+
+// A Codex rate limit window: 300 → "5-hour", 10080 → "weekly".
+export function windowLabel(minutes: number): string {
+  if (minutes === 300) return '5-hour';
+  if (minutes === 10080) return 'weekly';
+  return minutes % 1440 === 0 ? `${minutes / 1440}-day` : minutes % 60 === 0 ? `${minutes / 60}-hour` : `${minutes}-minute`;
+}

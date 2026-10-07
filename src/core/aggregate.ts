@@ -1,9 +1,12 @@
-import type { ApiCall, Dataset, Prompt, Session, ToolCall } from './types';
+import { windowLabel } from './format';
+import type { ApiCall, Dataset, Prompt, Session, Source, ToolCall } from './types';
 
 export interface Filter {
   from: number | null;
   to: number | null;
   project: string | null;
+  // Claude Code or Codex only, when the report combines both.
+  source: Source | null;
 }
 
 export interface Row {
@@ -26,8 +29,12 @@ const MAX_SERIES = 7;
 export const OTHER_COLOR = 'var(--series-other)';
 const SLOT = (i: number) => `var(--series-${i + 1})`;
 
-const inRange = (f: Filter) => (x: { ts: number; project: string }) =>
-  (f.from == null || x.ts >= f.from) && (f.to == null || x.ts < f.to) && (f.project == null || x.project === f.project);
+// A row's tool comes from its session.
+const inRange = (f: Filter, sourceOf: Map<string, Source>) => (x: { ts: number; project: string; sid: string }) =>
+  (f.from == null || x.ts >= f.from) &&
+  (f.to == null || x.ts < f.to) &&
+  (f.project == null || x.project === f.project) &&
+  (f.source == null || sourceOf.get(x.sid) === f.source);
 
 export function dayKey(ts: number): string {
   const d = new Date(ts);
@@ -53,6 +60,10 @@ function groupSum<T>(items: T[], key: (x: T) => string, val: (x: T) => number): 
   }
   return m;
 }
+
+// Shell tools: Claude Code's Bash and Codex's exec_command and friends.
+const SHELL_TOOLS = new Set(['Bash', 'exec_command', 'shell_command', 'shell', 'local_shell', 'container.exec']);
+const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'apply_patch'];
 
 const total = (c: ApiCall) => c.input + c.cw5 + c.cw1h + c.cr + c.out;
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -95,7 +106,8 @@ export const TOKEN_TYPES = [
 ] as const;
 
 export function buildView(ds: Dataset, f: Filter, palette: Palette, groupBy: GroupBy) {
-  const keep = inRange(f);
+  const sourceOf = new Map(ds.sessions.map((s) => [s.id, s.source]));
+  const keep = inRange(f, sourceOf);
   const calls = ds.calls.filter(keep);
   const tools = ds.tools.filter(keep);
   const prompts = ds.prompts.filter(keep);
@@ -106,7 +118,9 @@ export function buildView(ds: Dataset, f: Filter, palette: Palette, groupBy: Gro
   const denials = ds.denials.filter(keep);
   const hooks = ds.hooks.filter(keep);
   const apiErrors = ds.apiErrors.filter(keep);
-  const history = ds.history.filter(keep);
+  // History rows have no session, but know their tool.
+  const keepHistory = inRange({ ...f, source: null }, sourceOf);
+  const history = ds.history.filter((h) => keepHistory({ ...h, sid: '' }) && (f.source == null || h.source === f.source));
   const label = (p: string) => ds.projects[p] ?? p;
   const sessionById = new Map<string, Session>(ds.sessions.map((s) => [s.id, s]));
   const subById = new Map(ds.subagents.map((s) => [s.agentId, s]));
@@ -194,13 +208,17 @@ export function buildView(ds: Dataset, f: Filter, palette: Palette, groupBy: Gro
   const byModel = breakdown((c) => c.model, (k) => k);
   const byEffort = breakdown((c) => c.effort, (k) => k);
   const byThread = breakdown((c) => (c.sub ? 'Subagents' : 'Main thread'), (k) => k);
+  const bySource = breakdown((c) => (sourceOf.get(c.sid) === 'codex' ? 'Codex' : 'Claude Code'), (k) => k);
   const byTokenType: Row[] = TOKEN_TYPES.map((t) => ({
     key: t.key,
     label: t.label,
     value: sum(calls.map((c) => c[t.key])),
     tokens: sum(calls.map(t.tokens)),
     share: 0,
-  })).map((r) => ({ ...r, share: cost ? r.value / cost : 0 }));
+  }))
+    // Codex (OpenAI) has no cache writes.
+    .filter((r) => r.key !== 'costCw' || calls.some((c) => sourceOf.get(c.sid) !== 'codex'))
+    .map((r) => ({ ...r, share: cost ? r.value / cost : 0 }));
 
   // --- Most expensive prompts and sessions
   const topPrompts = [...realPrompts]
@@ -245,6 +263,7 @@ export function buildView(ds: Dataset, f: Filter, palette: Palette, groupBy: Gro
         key: sid,
         label: s?.title || sid.slice(0, 8),
         value: r.cost,
+        tool: s?.source === 'codex' ? 'Codex' : 'Claude Code',
         project: label(s?.project ?? ''),
         branch: s?.branch ?? '',
         ts: r.first,
@@ -260,19 +279,22 @@ export function buildView(ds: Dataset, f: Filter, palette: Palette, groupBy: Gro
     });
 
   // --- Tools
-  const toolRows = (key: (t: ToolCall) => string | null, lbl: (k: string) => string = (k) => k): Row[] => {
+  // A key can be a list: a Codex patch that touches several files counts once for each.
+  const toolRows = (key: (t: ToolCall) => string | string[] | null, lbl: (k: string) => string = (k) => k): Row[] => {
     const m = new Map<string, { n: number; err: number; resTok: number; carriedTok: number; carriedCost: number; images: number }>();
     for (const t of tools) {
-      const k = key(t);
-      if (k == null) continue;
-      const r = m.get(k) ?? { n: 0, err: 0, resTok: 0, carriedTok: 0, carriedCost: 0, images: 0 };
-      r.n++;
-      if (t.error) r.err++;
-      r.resTok += t.resTok;
-      r.carriedTok += t.carriedTok;
-      r.carriedCost += t.carriedCost;
-      r.images += t.images;
-      m.set(k, r);
+      const keys = key(t);
+      if (keys == null) continue;
+      for (const k of Array.isArray(keys) ? keys : [keys]) {
+        const r = m.get(k) ?? { n: 0, err: 0, resTok: 0, carriedTok: 0, carriedCost: 0, images: 0 };
+        r.n++;
+        if (t.error) r.err++;
+        r.resTok += t.resTok;
+        r.carriedTok += t.carriedTok;
+        r.carriedCost += t.carriedCost;
+        r.images += t.images;
+        m.set(k, r);
+      }
     }
     return [...m.entries()]
       .map(([k, r]) => ({ key: k, label: lbl(k), value: r.n, count: r.n, errors: r.err, errorRate: r.n ? r.err / r.n : 0, resTok: r.resTok, carriedTok: r.carriedTok, carriedCost: r.carriedCost, images: r.images }))
@@ -281,10 +303,10 @@ export function buildView(ds: Dataset, f: Filter, palette: Palette, groupBy: Gro
   const toolName = (t: ToolCall) => prettyTool(t.name);
   const byTool = toolRows(toolName);
   const byServer = toolRows((t) => t.server);
-  const byBash = toolRows((t) => (t.name === 'Bash' ? t.detail : null));
-  const fileRows = (names: string[]) => toolRows((t) => (names.includes(t.name) && t.detail ? t.detail : null));
+  const byBash = toolRows((t) => (SHELL_TOOLS.has(t.name) ? t.detail : null));
+  const fileRows = (names: string[]) => toolRows((t) => (names.includes(t.name) && t.detail ? (t.files ?? t.detail) : null));
   const filesRead = fileRows(['Read']);
-  const filesEdited = fileRows(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+  const filesEdited = fileRows(EDIT_TOOLS);
   const byContext = [...byTool].sort((a, b) => (b.carriedCost as number) - (a.carriedCost as number)).map((r) => ({ ...r, value: r.carriedCost as number }));
   const byWeb = toolRows((t) => (t.name === 'WebFetch' ? t.detail || '(other)' : null));
 
@@ -354,6 +376,32 @@ export function buildView(ds: Dataset, f: Filter, palette: Palette, groupBy: Gro
     total: sum(durations),
   };
 
+  // --- Plan usage limits (Codex). They are account-wide, so only the date filter applies.
+  const limitSamples = f.source === 'claude' ? [] : ds.limits.filter((x) => (f.from == null || x.ts >= f.from) && (f.to == null || x.ts < f.to));
+  const limitKeys = [...new Set(limitSamples.map((x) => `${x.limit}|${x.windowMinutes}`))].sort((a, b) => Number(a.split('|')[1]) - Number(b.split('|')[1]));
+  const lTs = limitSamples.map((x) => x.ts);
+  const lDays = lTs.length ? daysBetween(minOf(lTs), maxOf(lTs)) : [];
+  const lIdx = new Map(lDays.map((d, i) => [d, i]));
+  const limits = limitKeys.map((key) => {
+    const [limit, minutes] = key.split('|');
+    const samples = limitSamples.filter((x) => `${x.limit}|${x.windowMinutes}` === key);
+    const peaks = new Array(lDays.length).fill(0);
+    for (const x of samples) {
+      const i = lIdx.get(dayKey(x.ts));
+      if (i != null) peaks[i] = Math.max(peaks[i], x.usedPercent);
+    }
+    const latest = samples[samples.length - 1];
+    const window = windowLabel(Number(minutes));
+    const label = `${window[0].toUpperCase()}${window.slice(1)} limit${limit === 'codex' ? '' : ` (${limit})`}`;
+    return {
+      key,
+      label,
+      latest,
+      peak: maxOf(samples.map((x) => x.usedPercent)),
+      daily: { days: lDays, series: [{ key, label: 'Peak use', color: SLOT(0), values: peaks }] },
+    };
+  });
+
   // --- Friction
   const byDenialKind: Row[] = [...groupSum(denials, (d) => d.kind, () => 1).entries()].map(([k, n]) => ({ key: k, label: DENIAL_LABELS[k] ?? k, value: n })).sort((a, b) => b.value - a.value);
   const byDenialTool: Row[] = [...groupSum(denials, (d) => prettyTool(d.tool), () => 1).entries()].map(([k, n]) => ({ key: k, label: k, value: n })).sort((a, b) => b.value - a.value);
@@ -385,6 +433,7 @@ export function buildView(ds: Dataset, f: Filter, palette: Palette, groupBy: Gro
     byModel,
     byEffort,
     byThread,
+    bySource,
     byTokenType,
     topPrompts,
     topSessions,
@@ -408,6 +457,7 @@ export function buildView(ds: Dataset, f: Filter, palette: Palette, groupBy: Gro
     byStop,
     compactions: compactionRows,
     apiErrors,
+    limits,
     counts: { denials: denials.length, toolErrors: sum(toolErrors.map((r) => r.value)), apiErrors: apiErrors.length, compactions: compactions.length, autoCompactions: compactions.filter((c) => c.trigger === 'auto').length },
   };
 }

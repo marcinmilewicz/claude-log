@@ -11,6 +11,7 @@ import type {
   LiveSession,
   Prompt,
   Session,
+  Source,
   SkillUse,
   StatsCache,
   Subagent,
@@ -23,6 +24,7 @@ export type FileKind =
   | { kind: 'subagent'; project: string; sid: string; agentId: string }
   | { kind: 'subagent-meta'; project: string; sid: string; agentId: string }
   | { kind: 'subagent-skill'; project: string; sid: string; agentId: string }
+  | { kind: 'rollout'; sid: string }
   | { kind: 'history' }
   | { kind: 'stats' }
   | { kind: 'live' };
@@ -67,8 +69,8 @@ export function prettyCwd(cwd: string): string {
   return cwd.replace(/^\/(Users|home)\/[^/]+/, '~');
 }
 
-const IMAGE_TOKENS = 1600;
-const CHARS_PER_TOKEN = 4;
+export const IMAGE_TOKENS = 1600;
+export const CHARS_PER_TOKEN = 4;
 const PROMPT_TEXT_LIMIT = 200;
 const RUNNER_TWO_WORDS = new Set(['npx', 'pnpm', 'npm', 'yarn', 'bunx', 'bun', 'git', 'gh', 'docker', 'supabase', 'nx', 'uv', 'cargo', 'go', 'make', 'brew']);
 const SKIP_PROMPT_PREFIXES = ['<local-command', '<task-notification', '<command-message', '<system-reminder', '[Request interrupted', '<bash-'];
@@ -183,29 +185,31 @@ function between(s: string, open: string, close: string): string {
 const tsOf = (r: Rec): number => (typeof r.timestamp === 'string' ? Date.parse(r.timestamp) : 0);
 
 export class Ingestor {
-  private sessions = new Map<string, Session>();
-  private calls: ApiCall[] = [];
-  private tools: ToolCall[] = [];
-  private prompts: Prompt[] = [];
-  private skills: SkillUse[] = [];
-  private commands: Command[] = [];
-  private compactions: Compaction[] = [];
-  private turns: Turn[] = [];
-  private denials: Denial[] = [];
-  private hooks: HookEvent[] = [];
-  private apiErrors: ApiError[] = [];
-  private subagents = new Map<string, Subagent>();
-  private history: HistoryEntry[] = [];
-  private live: LiveSession[] = [];
-  private stats: StatsCache | null = null;
-  private seenRequests = new Set<string>();
-  private seenToolUses = new Set<string>();
-  private cwdByProject = new Map<string, Map<string, number>>();
-  private unknownModels = new Set<string>();
-  private files = { transcripts: 0, subagents: 0, skipped: 0, badLines: 0 };
+  protected sessions = new Map<string, Session>();
+  protected calls: ApiCall[] = [];
+  protected tools: ToolCall[] = [];
+  protected prompts: Prompt[] = [];
+  protected skills: SkillUse[] = [];
+  protected commands: Command[] = [];
+  protected compactions: Compaction[] = [];
+  protected turns: Turn[] = [];
+  protected denials: Denial[] = [];
+  protected hooks: HookEvent[] = [];
+  protected apiErrors: ApiError[] = [];
+  protected subagents = new Map<string, Subagent>();
+  protected history: HistoryEntry[] = [];
+  protected live: LiveSession[] = [];
+  protected stats: StatsCache | null = null;
+  protected seenRequests = new Set<string>();
+  protected seenToolUses = new Set<string>();
+  protected cwdByProject = new Map<string, Map<string, number>>();
+  protected unknownModels = new Set<string>();
+  protected files = { transcripts: 0, subagents: 0, skipped: 0, badLines: 0 };
   private file: FileState | null = null;
 
-  constructor(private sourceName: string) {}
+  protected readonly tool: Source = 'claude';
+
+  constructor(protected sourceName: string) {}
 
   skip() {
     this.files.skipped++;
@@ -477,7 +481,7 @@ export class Ingestor {
     f.pending = [];
   }
 
-  private addPrompt(ts: number, sid: string, project: string, text: string, kind: Prompt['kind']): number {
+  protected addPrompt(ts: number, sid: string, project: string, text: string, kind: Prompt['kind']): number {
     const id = this.prompts.length;
     this.prompts.push({
       id,
@@ -496,14 +500,14 @@ export class Ingestor {
     return id;
   }
 
-  private addSkill(ts: number, sid: string, project: string, name: string, source: SkillUse['source'], prompt: number) {
+  protected addSkill(ts: number, sid: string, project: string, name: string, source: SkillUse['source'], prompt: number) {
     this.skills.push({ ts, sid, project, name, source, prompt });
   }
 
-  private session(id: string, project: string): Session {
+  protected session(id: string, project: string): Session {
     let s = this.sessions.get(id);
     if (!s) {
-      s = { id, project, cwd: '', title: '', branch: '', version: '', entrypoint: '', firstTs: 0, lastTs: 0, reported: null };
+      s = { id, source: this.tool, project, cwd: '', title: '', branch: '', version: '', entrypoint: '', firstTs: 0, lastTs: 0, reported: null };
       this.sessions.set(id, s);
     }
     return s;
@@ -518,7 +522,7 @@ export class Ingestor {
     return s;
   }
 
-  private noteCwd(project: string, cwd: string) {
+  protected noteCwd(project: string, cwd: string) {
     let m = this.cwdByProject.get(project);
     if (!m) this.cwdByProject.set(project, (m = new Map()));
     m.set(cwd, (m.get(cwd) ?? 0) + 1);
@@ -584,7 +588,7 @@ export class Ingestor {
     }
     const cwd = String(d.project ?? '');
     const text = String(d.display ?? '');
-    this.history.push({ ts: Number(d.timestamp) || 0, project: projectKeyFromCwd(cwd), command: text.startsWith('/'), len: text.length });
+    this.history.push({ ts: Number(d.timestamp) || 0, source: 'claude', project: projectKeyFromCwd(cwd), command: text.startsWith('/'), len: text.length });
     if (cwd) this.noteCwd(projectKeyFromCwd(cwd), cwd);
   }
 
@@ -658,6 +662,7 @@ export class Ingestor {
     }
 
     return {
+      sources: [this.tool],
       sourceName: this.sourceName,
       generatedAt: Date.now(),
       projects,
@@ -676,6 +681,7 @@ export class Ingestor {
       history: this.history,
       live: this.live,
       stats: this.stats,
+      limits: [],
       unknownModels: [...this.unknownModels],
       files: this.files,
     };

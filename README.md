@@ -17,13 +17,20 @@ Zip to upload:
 cd ~/.claude && zip -r ~/Desktop/claude-data.zip projects history.jsonl stats-cache.json sessions -x '*/tool-results/*'
 ```
 
-## CLI: a local report without a zip
-
-The `claude-log` npm package reads `~/.claude` directly and writes the same dashboard as one self-contained HTML file (scripts, styles and data inlined) that opens from disk in a browser. Nothing is uploaded, not even to the local browser app.
+It also reads Codex data. Zip `~/.codex` too and drop both zips at once for one combined report (or only this one for a Codex report):
 
 ```sh
-npx claude-log                 # reads ~/.claude, writes ./claude-log-report.html and opens it
+cd ~/.codex && zip -r ~/Desktop/codex-data.zip sessions archived_sessions history.jsonl
+```
+
+## CLI: a local report without a zip
+
+The `claude-log` npm package reads `~/.claude` and `~/.codex` directly and writes the same dashboard as one self-contained HTML file (scripts, styles and data inlined) that opens from disk in a browser. Nothing is uploaded, not even to the local browser app.
+
+```sh
+npx claude-log                 # reads ~/.claude and ~/.codex, writes ./claude-log-report.html and opens it
 npx claude-log ~/Desktop/claude-data.zip -o report.html --no-open
+npx claude-log --claude        # only ~/.claude (--codex: only ~/.codex)
 ```
 
 See `cli/README.md` for all options. The report contains prompts and file paths, so don't share it carelessly. On large histories it can be tens of MB.
@@ -49,6 +56,24 @@ The package lives in `cli/` and has no runtime dependencies. Its `prepack` scrip
 | `history.jsonl` | prompt history (goes further back than the transcripts) |
 | `sessions/<pid>.json` | sessions running when the zip was made |
 | `stats-cache.json` | counters since the first session |
+
+### Codex
+
+Each directory or zip is detected from its file names: Claude Code transcripts win when both are present, otherwise `rollout-*.jsonl` files make it a Codex dataset (`src/core/ingest-codex.ts`). Several sources (by default `~/.claude` and `~/.codex`, whichever exist) are parsed separately and combined by `src/core/merge.ts`. The same directory has the same project key in both tools, so its Claude Code and Codex sessions land in one project, and the "Tool" filter narrows the dashboard to one of them.
+
+| File | What we take from it |
+|---|---|
+| `sessions/YYYY/MM/DD/rollout-<datetime>-<sessionId>.jsonl`, `archived_sessions/rollout-*.jsonl` | `session_meta` (cwd, git branch, CLI version), `turn_context` (model, effort), `token_count` (usage per response and plan usage limits), tool calls and their results (`exec_command`, `apply_patch`, MCP…), prompts, compactions, turn durations, interruptions |
+| `history.jsonl` | prompt history |
+
+Differences from Claude Code:
+
+- OpenAI has no cache writes. `cached_input_tokens` count as cache reads at the model's cached input rate, and the rest of the input at the input rate. Prices are the OpenAI standard tier (`src/core/pricing.ts`).
+- Codex writes most `token_count` events twice. A response counts only when the session's running `total_token_usage` changes.
+- A tool error is a non-zero exit code or a failed call. "Rejected or interrupted" counts commands you rejected or aborted.
+- Skills are counted when Codex reads a `skills/<name>/SKILL.md` file with a shell command.
+- The plan usage limits section shows the `rate_limits` readings (5-hour and weekly windows). They are account-wide, so only the date filter applies.
+- Codex records no subagents, hooks, cost-state or session titles. Those parts of the dashboard are hidden when the view has no Claude Code data, and the first prompt stands in for the session title.
 
 ## How the metrics are computed
 

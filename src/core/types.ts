@@ -1,6 +1,9 @@
-// Normalized data model the parser builds from Claude Code transcripts.
-// Every row has `ts` (ms) and `project` (the directory key in ~/.claude/projects)
-// so the date and project filters work the same way on every table.
+// Normalized data model the parser builds from Claude Code or Codex transcripts.
+// Every row has `ts` (ms) and `project` (the directory key in ~/.claude/projects,
+// or the same encoding of the session cwd for Codex) so the date and project
+// filters work the same way on every table.
+
+export type Source = 'claude' | 'codex';
 
 export interface ApiCall {
   ts: number;
@@ -33,6 +36,8 @@ export interface ToolCall {
   name: string;
   server: string | null;
   detail: string;
+  // Every file an edit touched, when there's more than one (Codex apply_patch).
+  files?: string[];
   sub: boolean;
   error: boolean;
   resTok: number;
@@ -134,6 +139,7 @@ export interface ReportedCost {
 
 export interface Session {
   id: string;
+  source: Source;
   project: string;
   cwd: string;
   title: string;
@@ -147,6 +153,7 @@ export interface Session {
 
 export interface HistoryEntry {
   ts: number;
+  source: Source;
   project: string;
   command: boolean;
   len: number;
@@ -172,7 +179,19 @@ export interface StatsCache {
   lastComputedDate: string | null;
 }
 
+// A plan usage limit reading from Codex (`rate_limits` on token_count events).
+// Only readings where the value changed are kept.
+export interface LimitSample {
+  ts: number;
+  limit: string;
+  windowMinutes: number;
+  usedPercent: number;
+  resetsAt: number;
+}
+
 export interface Dataset {
+  // Which tools the data comes from. A report can combine Claude Code and Codex.
+  sources: Source[];
   sourceName: string;
   generatedAt: number;
   projects: Record<string, string>;
@@ -191,6 +210,7 @@ export interface Dataset {
   history: HistoryEntry[];
   live: LiveSession[];
   stats: StatsCache | null;
+  limits: LimitSample[];
   unknownModels: string[];
   files: { transcripts: number; subagents: number; skipped: number; badLines: number };
 }

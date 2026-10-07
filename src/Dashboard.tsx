@@ -4,10 +4,14 @@ import { icons, Logo } from './components/icons';
 import { BarList, Card, DataTable, Segmented, StatTile, ThemeToggle, type Column } from './components/ui';
 import { buildPalette, buildView, type Filter, type GroupBy, type Row, type View } from './core/aggregate';
 import { compact, date, dateTime, dayLabel, duration, num, pct, usd, usdExact } from './core/format';
-import type { Dataset, LiveSession } from './core/types';
+import type { Dataset, LiveSession, Source } from './core/types';
 import type { Theme } from './theme';
 
 type Preset = 'all' | '30d' | '7d' | '1d' | 'custom';
+type ToolFilter = 'all' | Source;
+// Which tools the current view shows. Codex records no subagents, hooks,
+// cost-state or Read tool, so those parts are hidden without Claude Code data.
+type Has = { claude: boolean; codex: boolean };
 const DAY = 86_400_000;
 
 const n = (r: Row, k: string) => Number(r[k] ?? 0);
@@ -24,6 +28,7 @@ export default function Dashboard({ dataset: ds, onReset, theme, onTheme }: { da
   const [customFrom, setCustomFrom] = useState(toInputDate(Number.isFinite(firstTs) ? firstTs : lastTs));
   const [customTo, setCustomTo] = useState(toInputDate(lastTs));
   const [project, setProject] = useState<string>('');
+  const [tool, setTool] = useState<ToolFilter>('all');
   const [groupBy, setGroupBy] = useState<GroupBy>('model');
   const [heatMetric, setHeatMetric] = useState<'prompts' | 'cost'>('prompts');
 
@@ -32,23 +37,27 @@ export default function Dashboard({ dataset: ds, onReset, theme, onTheme }: { da
     endOfLast.setHours(24, 0, 0, 0);
     const end = endOfLast.getTime();
     const p = project || null;
+    const source = tool === 'all' ? null : tool;
     switch (preset) {
       case 'all':
-        return { from: null, to: null, project: p };
+        return { from: null, to: null, project: p, source };
       case '30d':
-        return { from: end - 30 * DAY, to: end, project: p };
+        return { from: end - 30 * DAY, to: end, project: p, source };
       case '7d':
-        return { from: end - 7 * DAY, to: end, project: p };
+        return { from: end - 7 * DAY, to: end, project: p, source };
       case '1d':
-        return { from: end - DAY, to: end, project: p };
+        return { from: end - DAY, to: end, project: p, source };
       case 'custom': {
         const from = customFrom ? new Date(customFrom + 'T00:00').getTime() : null;
         const to = customTo ? new Date(customTo + 'T00:00').getTime() + DAY : null;
-        return { from, to, project: p };
+        return { from, to, project: p, source };
       }
     }
-  }, [preset, customFrom, customTo, project, lastTs]);
+  }, [preset, customFrom, customTo, project, tool, lastTs]);
 
+  const both = ds.sources.length > 1;
+  const shown = tool === 'all' ? ds.sources : [tool];
+  const has: Has = { claude: shown.includes('claude'), codex: shown.includes('codex') };
   const palette = useMemo(() => buildPalette(ds), [ds]);
   const v = useMemo(() => buildView(ds, filter, palette, groupBy), [ds, filter, palette, groupBy]);
   const projectOptions = useMemo(() => {
@@ -66,14 +75,14 @@ export default function Dashboard({ dataset: ds, onReset, theme, onTheme }: { da
         <div className="brand">
           <Logo size={36} />
           <div>
-            <h1>Claude Code Analytics</h1>
+            <h1>{both ? 'Claude Code + Codex Analytics' : ds.sources[0] === 'codex' ? 'Codex Analytics' : 'Claude Code Analytics'}</h1>
             <div className="source">
               <span className="source-file">
                 {icons.file}
                 {ds.sourceName}
               </span>
               <span>
-                {num(ds.files.transcripts)} sessions · {num(ds.files.subagents)} subagents
+                {num(ds.files.transcripts)} sessions{ds.sources.includes('claude') ? ` · ${num(ds.files.subagents)} subagents` : ''}
               </span>
               <span>
                 {date(firstTs)} – {date(lastTs)}
@@ -114,6 +123,18 @@ export default function Dashboard({ dataset: ds, onReset, theme, onTheme }: { da
             </label>
           </>
         )}
+        {both && (
+          <Segmented<ToolFilter>
+            label="Tool"
+            value={tool}
+            onChange={setTool}
+            options={[
+              { value: 'all', label: 'All tools' },
+              { value: 'claude', label: 'Claude Code' },
+              { value: 'codex', label: 'Codex' },
+            ]}
+          />
+        )}
         <label className="field">
           Project
           <select value={project} onChange={(e) => setProject(e.target.value)}>
@@ -134,15 +155,18 @@ export default function Dashboard({ dataset: ds, onReset, theme, onTheme }: { da
         </div>
       )}
 
-      <Overview v={v} />
-      <Spend v={v} groupBy={groupBy} setGroupBy={setGroupBy} />
-      <Prompts v={v} />
-      <Sessions v={v} />
+      <Overview v={v} has={has} />
+      {/* Limits lead a Codex-only report; next to Claude Code data they are a detail. */}
+      {v.limits.length > 0 && !has.claude && <Limits v={v} has={has} />}
+      <Spend v={v} groupBy={groupBy} setGroupBy={setGroupBy} has={has} />
+      <Prompts v={v} has={has} />
+      <Sessions v={v} has={has} />
       <Context v={v} />
-      <Tools v={v} />
-      <Skills v={v} />
+      <Tools v={v} has={has} />
+      {(has.claude || v.bySkill.length > 0 || v.byCommand.length > 0) && <Skills v={v} has={has} />}
       <Activity v={v} heatMetric={heatMetric} setHeatMetric={setHeatMetric} live={ds.live} projects={ds.projects} />
-      <Friction v={v} />
+      {v.limits.length > 0 && has.claude && <Limits v={v} has={has} />}
+      <Friction v={v} has={has} />
     </div>
   );
 }
@@ -162,7 +186,7 @@ function Section({ title, icon, lead, children }: { title: string; icon: ReactNo
 
 // ---------- Overview ----------
 
-function Overview({ v }: { v: View }) {
+function Overview({ v, has }: { v: View; has: Has }) {
   const k = v.kpi;
   const gap = k.reported.cost ? k.reported.computed / k.reported.cost - 1 : 0;
   return (
@@ -179,7 +203,7 @@ function Overview({ v }: { v: View }) {
               {pct(Math.abs(gap), 1)} {gap < 0 ? 'less' : 'more'} because they don't include auxiliary calls.
             </>
           ) : (
-            'On a subscription this is the equivalent value, not an actual bill.'
+            `On a subscription this is the equivalent value, not an actual bill.${has.codex ? ' Codex costs use OpenAI standard tier prices.' : ''}`
           )
         }
       />
@@ -189,21 +213,76 @@ function Overview({ v }: { v: View }) {
       <StatTile label="Sessions" value={num(k.sessions)} sub={`${usd(k.sessions ? k.cost / k.sessions : 0)} avg per session`} />
       <StatTile label="Tool calls" value={num(k.tools)} sub={`${(k.prompts ? k.tools / k.prompts : 0).toFixed(1)} per prompt`} />
       <StatTile label="Output tokens" value={compact(k.out)} sub={`${pct(k.thinkShare)} is thinking`} />
-      <StatTile label="Subagent share of cost" value={pct(k.subShare)} />
-      <StatTile label="Daily average" value={usd(k.perDay)} sub={`${num(k.activeDays)} active days`} />
-      <StatTile label="Most expensive day" value={k.peakDay ? usd(k.peakDay[1]) : '—'} sub={k.peakDay ? dayLabel(k.peakDay[0]) : undefined} />
+      {has.claude && <StatTile label="Subagent share of cost" value={pct(k.subShare)} />}
+      <StatTile span={has.claude ? 3 : 6} label="Daily average" value={usd(k.perDay)} sub={`${num(k.activeDays)} active days`} />
       <StatTile
-        label="Lines changed"
-        value={`+${compact(k.reported.linesAdded)} / −${compact(k.reported.linesRemoved)}`}
-        sub="from cost-state records, finished sessions only"
+        span={has.claude ? 3 : 6}
+        label="Most expensive day"
+        value={k.peakDay ? usd(k.peakDay[1]) : '—'}
+        sub={k.peakDay ? dayLabel(k.peakDay[0]) : undefined}
       />
+      {has.claude && (
+        <StatTile
+          label="Lines changed"
+          value={`+${compact(k.reported.linesAdded)} / −${compact(k.reported.linesRemoved)}`}
+          sub="from cost-state records, finished sessions only"
+        />
+      )}
+    </Section>
+  );
+}
+
+// ---------- Plan usage limits (Codex) ----------
+
+const percent = (v: number) => `${Math.round(v)}%`;
+
+function Limits({ v, has }: { v: View; has: Has }) {
+  return (
+    <Section
+      title={has.claude ? 'Codex plan usage limits' : 'Plan usage limits'}
+      icon={icons.chart}
+      lead="Codex records how much of each plan limit window is used up after every response. Limits are account-wide, so the project filter doesn't apply to them."
+    >
+      {v.limits.map((l) => (
+        <StatTile
+          key={l.key}
+          span={6}
+          label={`${l.label}: last reading`}
+          value={percent(l.latest.usedPercent)}
+          sub={
+            <>
+              at {dateTime(l.latest.ts)}
+              {l.latest.resetsAt > 0 && <> · reset {dateTime(l.latest.resetsAt)}</>} · peak in range {percent(l.peak)}
+            </>
+          }
+        />
+      ))}
+      {v.limits.map((l) => (
+        <Card
+          key={l.key}
+          span={v.limits.length > 1 ? 6 : 12}
+          title={`${l.label}: peak use per day`}
+          sub="Highest reading of the day, in % of the limit"
+          table={{
+            rows: l.daily.days.map((d, i) => ({ day: d, value: l.daily.series[0].values[i] })),
+            columns: [
+              { key: 'day', label: 'Day' },
+              { key: 'value', label: 'Peak use', num: true, render: (r: { value: number }) => percent(r.value) },
+            ],
+          }}
+        >
+          <StackedColumns days={l.daily.days} series={l.daily.series} format={percent} />
+        </Card>
+      ))}
     </Section>
   );
 }
 
 // ---------- Where the money goes ----------
 
-function Spend({ v, groupBy, setGroupBy }: { v: View; groupBy: GroupBy; setGroupBy: (g: GroupBy) => void }) {
+function Spend({ v, groupBy, setGroupBy, has }: { v: View; groupBy: GroupBy; setGroupBy: (g: GroupBy) => void; has: Has }) {
+  const span = has.claude ? 4 : 6;
+  const both = has.claude && has.codex;
   const breakdownTable = (rows: Row[], first: string) => ({
     rows,
     sortKey: 'value',
@@ -249,14 +328,19 @@ function Spend({ v, groupBy, setGroupBy }: { v: View; groupBy: GroupBy; setGroup
       >
         <StackedColumns days={v.daily.days} series={v.daily.series} format={usd} />
       </Card>
-      <Card span={6} title="Cost by project" table={breakdownTable(v.byProject, 'Project')}>
+      <Card span={both ? 4 : 6} title="Cost by project" table={breakdownTable(v.byProject, 'Project')}>
         <BarList rows={v.byProject} format={usd} tip={tip} />
       </Card>
-      <Card span={6} title="Cost by model" table={breakdownTable(v.byModel, 'Model')}>
+      <Card span={both ? 4 : 6} title="Cost by model" table={breakdownTable(v.byModel, 'Model')}>
         <BarList rows={v.byModel} format={usd} tip={tip} />
       </Card>
+      {both && (
+        <Card span={4} title="Cost by tool" table={breakdownTable(v.bySource, 'Tool')}>
+          <BarList rows={v.bySource} format={usd} tip={tip} />
+        </Card>
+      )}
       <Card
-        span={4}
+        span={span}
         title="Cost by token type"
         sub="What you actually pay for"
         table={{
@@ -272,22 +356,28 @@ function Spend({ v, groupBy, setGroupBy }: { v: View; groupBy: GroupBy; setGroup
       >
         <BarList rows={v.byTokenType} format={usd} tip={(r) => [{ name: 'share', value: pct(n(r, 'share'), 1) }, { name: 'tokens', value: compact(n(r, 'tokens')) }]} />
       </Card>
-      <Card span={4} title="Cost by effort level" table={breakdownTable(v.byEffort, 'Effort')}>
+      <Card span={span} title="Cost by effort level" table={breakdownTable(v.byEffort, 'Effort')}>
         <BarList rows={v.byEffort} format={usd} tip={tip} />
       </Card>
-      <Card span={4} title="Main thread vs. subagents" table={breakdownTable(v.byThread, 'Thread')}>
-        <BarList rows={v.byThread} format={usd} tip={tip} />
-      </Card>
+      {has.claude && (
+        <Card span={4} title="Main thread vs. subagents" table={breakdownTable(v.byThread, 'Thread')}>
+          <BarList rows={v.byThread} format={usd} tip={tip} />
+        </Card>
+      )}
     </Section>
   );
 }
 
 // ---------- Prompts ----------
 
-function Prompts({ v }: { v: View }) {
+function Prompts({ v, has }: { v: View; has: Has }) {
   type P = View['topPrompts'][number];
   return (
-    <Section title="Most expensive prompts" icon={icons.prompt} lead="A prompt's cost is every API call from when it was sent until the next prompt, including subagents started in that time.">
+    <Section
+      title="Most expensive prompts"
+      icon={icons.prompt}
+      lead={`A prompt's cost is every API call from when it was sent until the next prompt${has.claude ? ', including subagents started in that time.' : '.'}`}
+    >
       <Card span={12} title="Top 100 prompts by cost">
         <DataTable<P>
           rows={v.topPrompts}
@@ -317,7 +407,7 @@ function Prompts({ v }: { v: View }) {
             { key: 'ts', label: 'When', render: (r) => dateTime(r.ts), value: (r) => r.ts },
             { key: 'calls', label: 'Calls', num: true, render: (r) => num(r.calls) },
             { key: 'tools', label: 'Tools', num: true, render: (r) => num(r.tools) },
-            { key: 'subCost', label: 'Subagents part', num: true, render: (r) => (r.subCost ? usd(r.subCost) : '—') },
+            ...(has.claude ? [{ key: 'subCost', label: 'Subagents part', num: true, render: (r: P) => (r.subCost ? usd(r.subCost) : '—') }] : []),
             { key: 'tokens', label: 'Tokens', num: true, render: (r) => compact(r.tokens) },
           ]}
         />
@@ -328,10 +418,14 @@ function Prompts({ v }: { v: View }) {
 
 // ---------- Sessions ----------
 
-function Sessions({ v }: { v: View }) {
+function Sessions({ v, has }: { v: View; has: Has }) {
   type S = View['topSessions'][number];
   return (
-    <Section title="Sessions" icon={icons.sessions} lead="“Max context” is the largest input of a single main-thread call. Long sessions without /clear read that context on every step.">
+    <Section
+      title="Sessions"
+      icon={icons.sessions}
+      lead={`“Max context” is the largest input of a single main-thread call. Long sessions without ${has.claude ? (has.codex ? '/clear (/new in Codex)' : '/clear') : '/new'} read that context on every step.`}
+    >
       <Card span={12} title="Top 100 sessions by cost">
         <DataTable<S>
           rows={v.topSessions}
@@ -339,6 +433,7 @@ function Sessions({ v }: { v: View }) {
           columns={[
             { key: 'value', label: 'Cost', num: true, render: (r) => usdExact(r.value) },
             { key: 'label', label: 'Session', wrap: true },
+            ...(has.claude && has.codex ? [{ key: 'tool', label: 'Tool' }] : []),
             { key: 'project', label: 'Project' },
             { key: 'branch', label: 'Branch' },
             { key: 'ts', label: 'Start', render: (r) => dateTime(r.ts), value: (r) => r.ts },
@@ -348,7 +443,7 @@ function Sessions({ v }: { v: View }) {
             { key: 'tools', label: 'Tools', num: true, render: (r) => num(r.tools) },
             { key: 'maxCtx', label: 'Max context', num: true, render: (r) => compact(r.maxCtx) },
             { key: 'compactions', label: 'Compactions', num: true },
-            { key: 'subagents', label: 'Subagents', num: true },
+            ...(has.claude ? [{ key: 'subagents', label: 'Subagents', num: true }] : []),
           ]}
         />
       </Card>
@@ -394,7 +489,13 @@ function Context({ v }: { v: View }) {
         />
       </Card>
       <div className="span-4" style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
-        <StatTile span={null} label="Compactions" value={num(c.compactions)} sub={`${num(c.autoCompactions)} automatic`} />
+        <StatTile
+          span={null}
+          label="Compactions"
+          value={num(c.compactions)}
+          // Codex doesn't record what triggered a compaction.
+          sub={v.compactions.every((x) => x.trigger === 'unknown') ? undefined : `${num(c.autoCompactions)} automatic`}
+        />
         <StatTile
           span={null}
           label="Avg context before compaction"
@@ -448,7 +549,7 @@ const toolTip = (r: Row) => [
   { name: 'result tokens', value: compact(n(r, 'resTok')) },
 ];
 
-function Tools({ v }: { v: View }) {
+function Tools({ v, has }: { v: View; has: Has }) {
   return (
     <Section title="Tools and MCP" icon={icons.tools}>
       <Card span={6} title="Most used tools" table={toolTable(v.byTool, 'Tool')}>
@@ -457,13 +558,26 @@ function Tools({ v }: { v: View }) {
       <Card span={6} title="MCP servers" table={toolTable(v.byServer, 'Server')}>
         <BarList rows={v.byServer} format={num} tip={toolTip} limit={12} />
       </Card>
-      <Card span={4} title="Bash commands" sub="First word of the command, skipping cd and variables" table={toolTable(v.byBash, 'Command')}>
+      <Card
+        span={has.claude ? 4 : 6}
+        title={has.codex ? 'Shell commands' : 'Bash commands'}
+        sub="First word of the command, skipping cd and variables"
+        table={toolTable(v.byBash, 'Command')}
+      >
         <BarList rows={v.byBash} format={num} tip={toolTip} limit={12} />
       </Card>
-      <Card span={4} title="Most read files" table={toolTable(v.filesRead, 'File')}>
-        <BarList rows={v.filesRead} format={num} tip={toolTip} limit={12} display={pathTail} />
-      </Card>
-      <Card span={4} title="Most edited files" sub="Edit, Write, MultiEdit" table={toolTable(v.filesEdited, 'File')}>
+      {/* Codex reads files through shell commands, so there is no Read tool to count. */}
+      {has.claude && (
+        <Card span={4} title="Most read files" table={toolTable(v.filesRead, 'File')}>
+          <BarList rows={v.filesRead} format={num} tip={toolTip} limit={12} display={pathTail} />
+        </Card>
+      )}
+      <Card
+        span={has.claude ? 4 : 6}
+        title="Most edited files"
+        sub={!has.claude ? 'apply_patch, once per file in a patch' : has.codex ? 'Edit, Write, MultiEdit, apply_patch' : 'Edit, Write, MultiEdit'}
+        table={toolTable(v.filesEdited, 'File')}
+      >
         <BarList rows={v.filesEdited} format={num} tip={toolTip} limit={12} display={pathTail} />
       </Card>
       {v.byWeb.length > 0 && (
@@ -477,12 +591,16 @@ function Tools({ v }: { v: View }) {
 
 // ---------- Skills, subagents, commands ----------
 
-function Skills({ v }: { v: View }) {
+function Skills({ v, has }: { v: View; has: Has }) {
   return (
     <Section
-      title="Skills, subagents and commands"
+      title={has.claude ? 'Skills, subagents and commands' : 'Skills and commands'}
       icon={icons.skills}
-      lead="A skill is counted when the model invoked it (the Skill tool), when you typed it as a /command, or when it started a subagent (forked skill). Turn cost is the total cost of the prompts in which the skill was used."
+      lead={
+        has.claude
+          ? `A skill is counted when the model invoked it (the Skill tool), when you typed it as a /command, or when it started a subagent (forked skill).${has.codex ? ' A Codex skill is counted when Codex reads its SKILL.md.' : ''} Turn cost is the total cost of the prompts in which the skill was used.`
+          : 'A skill is counted when Codex reads its SKILL.md with a shell command. Turn cost is the total cost of the prompts in which the skill was used.'
+      }
     >
       <Card
         span={6}
@@ -513,31 +631,33 @@ function Skills({ v }: { v: View }) {
           ]}
         />
       </Card>
-      <Card
-        span={6}
-        title="Subagent cost by type"
-        table={{
-          rows: v.byAgent,
-          sortKey: 'value',
-          columns: [
-            { key: 'label', label: 'Type' },
-            { key: 'value', label: 'Cost', num: true, render: (r: Row) => usdExact(r.value) },
-            { key: 'runs', label: 'Runs', num: true },
-            { key: 'perRun', label: 'Per run', num: true, render: (r: Row) => usd(n(r, 'perRun')) },
-            { key: 'calls', label: 'API calls', num: true, render: (r: Row) => num(n(r, 'calls')) },
-          ] as Column<Row>[],
-        }}
-      >
-        <BarList
-          rows={v.byAgent}
-          format={usd}
-          limit={12}
-          tip={(r) => [
-            { name: 'runs', value: num(n(r, 'runs')) },
-            { name: 'per run', value: usd(n(r, 'perRun')) },
-          ]}
-        />
-      </Card>
+      {has.claude && (
+        <Card
+          span={6}
+          title="Subagent cost by type"
+          table={{
+            rows: v.byAgent,
+            sortKey: 'value',
+            columns: [
+              { key: 'label', label: 'Type' },
+              { key: 'value', label: 'Cost', num: true, render: (r: Row) => usdExact(r.value) },
+              { key: 'runs', label: 'Runs', num: true },
+              { key: 'perRun', label: 'Per run', num: true, render: (r: Row) => usd(n(r, 'perRun')) },
+              { key: 'calls', label: 'API calls', num: true, render: (r: Row) => num(n(r, 'calls')) },
+            ] as Column<Row>[],
+          }}
+        >
+          <BarList
+            rows={v.byAgent}
+            format={usd}
+            limit={12}
+            tip={(r) => [
+              { name: 'runs', value: num(n(r, 'runs')) },
+              { name: 'per run', value: usd(n(r, 'perRun')) },
+            ]}
+          />
+        </Card>
+      )}
       <Card
         span={6}
         title="Slash commands"
@@ -652,7 +772,8 @@ const LIVE_STATUS: Record<string, { label: string; color: string }> = {
 
 // ---------- Friction ----------
 
-function Friction({ v }: { v: View }) {
+function Friction({ v, has }: { v: View; has: Has }) {
+  const tile = has.claude ? 3 : 4;
   const simple = (first: string) => ({
     sortKey: 'value',
     columns: [
@@ -661,35 +782,50 @@ function Friction({ v }: { v: View }) {
     ] as Column<Row>[],
   });
   return (
-    <Section title="Friction" icon={icons.friction} lead="Where work gets stuck: permission denials, tool errors, hooks, API errors. Tools that are denied often are candidates for the allowlist.">
-      <StatTile label="Permission denials" value={num(v.counts.denials)} />
-      <StatTile label="Tool errors" value={num(v.counts.toolErrors)} sub={v.kpi.tools ? `${pct(v.counts.toolErrors / v.kpi.tools, 1)} of calls` : undefined} />
-      <StatTile label="API errors" value={num(v.counts.apiErrors)} sub="overloads, rate limits, dropped connections" />
-      <StatTile label="Model refusals" value={num(v.byStop.find((r) => r.key === 'refusal')?.value ?? 0)} sub="stop_reason = refusal" />
+    <Section
+      title="Friction"
+      icon={icons.friction}
+      lead={
+        !has.claude
+          ? 'Where work gets stuck: commands you rejected or interrupted, tool errors (including non-zero exit codes), API errors.'
+          : 'Where work gets stuck: permission denials, tool errors, hooks, API errors. Tools that are denied often are candidates for the allowlist.'
+      }
+    >
+      <StatTile span={tile} label={has.claude ? 'Permission denials' : 'Rejected or interrupted'} value={num(v.counts.denials)} />
+      <StatTile
+        span={tile}
+        label="Tool errors"
+        value={num(v.counts.toolErrors)}
+        sub={v.kpi.tools ? `${pct(v.counts.toolErrors / v.kpi.tools, 1)} of calls` : undefined}
+      />
+      <StatTile span={tile} label="API errors" value={num(v.counts.apiErrors)} sub="overloads, rate limits, dropped connections" />
+      {has.claude && <StatTile label="Model refusals" value={num(v.byStop.find((r) => r.key === 'refusal')?.value ?? 0)} sub="stop_reason = refusal" />}
       <Card span={6} title="Denials by reason" table={{ rows: v.byDenialKind, ...simple('Reason') }}>
         <BarList rows={v.byDenialKind} format={num} />
       </Card>
       <Card span={6} title="Denials by tool" table={{ rows: v.byDenialTool, ...simple('Tool') }}>
         <BarList rows={v.byDenialTool} format={num} />
       </Card>
-      <Card span={6} title="Tool errors" table={toolTable(v.toolErrors, 'Tool')}>
+      <Card span={has.claude ? 6 : 12} title="Tool errors" table={toolTable(v.toolErrors, 'Tool')}>
         <BarList rows={v.toolErrors} format={num} tip={(r) => [{ name: 'of all calls', value: pct(n(r, 'errorRate'), 1) }]} />
       </Card>
-      <Card
-        span={6}
-        title="Hooks"
-        table={{
-          rows: v.byHook,
-          sortKey: 'value',
-          columns: [
-            { key: 'label', label: 'Hook' },
-            { key: 'value', label: 'Runs', num: true },
-            { key: 'errors', label: 'Errors', num: true },
-          ] as Column<Row>[],
-        }}
-      >
-        <BarList rows={v.byHook} format={num} tip={(r) => [{ name: 'errors', value: num(n(r, 'errors')) }]} />
-      </Card>
+      {has.claude && (
+        <Card
+          span={6}
+          title="Hooks"
+          table={{
+            rows: v.byHook,
+            sortKey: 'value',
+            columns: [
+              { key: 'label', label: 'Hook' },
+              { key: 'value', label: 'Runs', num: true },
+              { key: 'errors', label: 'Errors', num: true },
+            ] as Column<Row>[],
+          }}
+        >
+          <BarList rows={v.byHook} format={num} tip={(r) => [{ name: 'errors', value: num(n(r, 'errors')) }]} />
+        </Card>
+      )}
       {v.apiErrors.length > 0 && (
         <Card span={12} title="Recent API errors">
           <DataTable
